@@ -72,8 +72,8 @@ async function main() {
     "DemoSpaToken",
     "DST"
   );
-  const receipt = await tx.wait();
-  const event = receipt.logs.find(log => log.eventName === "BusinessCreated");
+  const receipt: any = await tx.wait();
+  const event = receipt.logs.find((log: any) => log.eventName === "BusinessCreated");
 
   const business = {
     id: event.args?.business,
