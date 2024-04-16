@@ -63,6 +63,7 @@ contract BusinessFactory is Initializable, OwnableUpgradeable {
         BaseToken(token).setMinter(rewardRouter, true);
         BaseToken(token).transferOwnership(businessOwner);
         
+        require(BaseToken(token).owner() == businessOwner, "Token ownership transfer failed");
 
         // Clone and initialize RedeemRouter
         redeemRouter = redeemRouterImpl.clone();

@@ -41,11 +41,15 @@ describe("BusinessFactory", () => {
     redeemRouterImpl = await RedeemRouterFactory.deploy();
     await redeemRouterImpl.waitForDeployment();
 
-    const TokenRewardModuleFactory = await ethers.getContractFactory("TokenRewardModule");
+    const TokenRewardModuleFactory = await ethers.getContractFactory(
+      "TokenRewardModule"
+    );
     const rewardModule = await TokenRewardModuleFactory.deploy();
     await rewardModule.waitForDeployment();
 
-    const TokenRedeemModuleFactory = await ethers.getContractFactory("TokenRedeemModule");
+    const TokenRedeemModuleFactory = await ethers.getContractFactory(
+      "TokenRedeemModule"
+    );
     const redeemModule = await TokenRedeemModuleFactory.deploy();
     await redeemModule.waitForDeployment();
 
@@ -68,12 +72,14 @@ describe("BusinessFactory", () => {
   });
 
   it("should create a new business with routers and token", async () => {
-    const tx = await factory.connect(deployer).createBusiness(
-      "Pizza Palace",
-      businessOwner.address,
-      "Pizza Palace token",
-      "PPT" 
-    );
+    const tx = await factory
+      .connect(deployer)
+      .createBusiness(
+        "Pizza Palace",
+        businessOwner.address,
+        "Pizza Palace token",
+        "PPT"
+      );
     const receipt = await tx.wait();
     const event = receipt?.logs?.find(
       (log: any) => log.eventName === "BusinessCreated"
@@ -86,16 +92,30 @@ describe("BusinessFactory", () => {
 
     // Check registry
     expect(businessAddress).to.equal(redeemRouterAddr);
-    expect(await registry.getBusinessOwner(businessAddress)).to.equal(businessOwner.address);
-    expect(await registry.getBusinessName(businessAddress)).to.equal("Pizza Palace");
-    expect(await registry.getBusinessToken(businessAddress)).to.equal(tokenAddr);
-    expect(await registry.getRewardRouter(businessAddress)).to.equal(rewardRouterAddr);
-    expect(await registry.getRedeemRouter(businessAddress)).to.equal(redeemRouterAddr);
+    expect(await registry.getBusinessOwner(businessAddress)).to.equal(
+      businessOwner.address
+    );
+    expect(await registry.getBusinessName(businessAddress)).to.equal(
+      "Pizza Palace"
+    );
+    expect(await registry.getBusinessToken(businessAddress)).to.equal(
+      tokenAddr
+    );
+    expect(await registry.getRewardRouter(businessAddress)).to.equal(
+      rewardRouterAddr
+    );
+    expect(await registry.getRedeemRouter(businessAddress)).to.equal(
+      redeemRouterAddr
+    );
 
     // Check token ownership
     const Token = await ethers.getContractFactory("BaseToken");
     const token = Token.attach(tokenAddr);
     expect(await token.owner()).to.equal(businessOwner.address);
+
+    // check if Business RewardRouter is set as minter
+    expect(await token.hasRole(await token.MINTER_ROLE(), rewardRouterAddr)).to
+      .be.true;
 
     // Check routers initialized
     const Router = await ethers.getContractFactory("RewardRouter");
@@ -105,18 +125,22 @@ describe("BusinessFactory", () => {
 
   it("should prevent non-deployer from creating business", async () => {
     await expect(
-      factory.connect(businessOwner).createBusiness("Fake Store", businessOwner.address, "Fake Token", "FT")
+      factory
+        .connect(businessOwner)
+        .createBusiness("Fake Store", businessOwner.address, "Fake Token", "FT")
     ).to.be.revertedWithCustomError(factory, "OwnableUnauthorizedAccount");
   });
 
   // simulate reward / redeem flow
   it("should reward tokens to user and then redeem them", async () => {
-    const tx = await factory.connect(deployer).createBusiness(
-      "Burger House",
-      businessOwner.address,
-      "BurgerToken",
-      "BTK"
-    );
+    const tx = await factory
+      .connect(deployer)
+      .createBusiness(
+        "Burger House",
+        businessOwner.address,
+        "BurgerToken",
+        "BTK"
+      );
 
     const receipt = await tx.wait();
     const event = receipt?.logs?.find(
@@ -128,8 +152,14 @@ describe("BusinessFactory", () => {
     const redeemRouterAddr = event.args?.redeemRouter;
 
     const token = await ethers.getContractAt("BaseToken", tokenAddr);
-    const rewardRouter = await ethers.getContractAt("RewardRouter", rewardRouterAddr);
-    const redeemRouter = await ethers.getContractAt("RedeemRouter", redeemRouterAddr);
+    const rewardRouter = await ethers.getContractAt(
+      "RewardRouter",
+      rewardRouterAddr
+    );
+    const redeemRouter = await ethers.getContractAt(
+      "RedeemRouter",
+      redeemRouterAddr
+    );
 
     // Step 2: Reward user (businessOwner triggers reward logic)
 
@@ -137,14 +167,28 @@ describe("BusinessFactory", () => {
       ["address", "address", "uint256"],
       [await token.getAddress(), user.address, 100]
     );
-    
-    // get random account to set as handler
-    await rewardRouter.connect(businessOwner).setHandler(user2.address, true);
-    // check if handler is set
-    expect(await rewardRouter.hasRole(await rewardRouter.HANDLER_ROLE(), user2.address)).to.be.true;
-    await rewardRouter.connect(user2).handle("token", rewardData);
 
-    expect(await token.balanceOf(user.address)).to.equal(100);
+    // get random account to set as handler
+    const user3 = (await ethers.getSigners())[10];
+    await rewardRouter.connect(businessOwner).setHandler(user2.address, true);
+    await rewardRouter.connect(businessOwner).setHandler(user3.address, true);
+    // check if handler is set
+    expect(
+      await rewardRouter.hasRole(
+        await rewardRouter.HANDLER_ROLE(),
+        user2.address
+      )
+    ).to.be.true;
+    expect(
+      await rewardRouter.hasRole(
+        await rewardRouter.HANDLER_ROLE(),
+        user3.address
+      )
+    ).to.be.true;
+    await rewardRouter.connect(user2).handle("token", rewardData);
+    await rewardRouter.connect(user3).handle("token", rewardData);
+
+    expect(await token.balanceOf(user.address)).to.equal(200);
 
     // Step 3: Redeem tokens (user triggers redeem logic)
 
@@ -154,12 +198,11 @@ describe("BusinessFactory", () => {
     );
 
     await token.connect(user).approve(redeemRouterAddr, 100);
-    
+
     await redeemRouter.connect(businessOwner).setHandler(user2.address, true);
     await redeemRouter.connect(user2).handle("token", redeemData);
 
     const finalBalance = await token.balanceOf(user.address);
-    expect(finalBalance).to.equal(0);
-
+    expect(finalBalance).to.equal(100);
   });
 });

@@ -20,6 +20,7 @@ contract RewardRouter is Initializable, OwnableUpgradeable, AccessControlUpgrade
     event ModuleRemoved(string indexed moduleType, address indexed oldModule);
     event ModuleReplaced(string indexed moduleType, address indexed oldModule, address indexed newModule);
     event HandlerSet(address indexed account, bool allowed);
+    event Handled(string indexed moduleType, bytes data);
 
     function initialize(address businessOwner) external initializer {
         __Ownable_init(businessOwner);
@@ -91,5 +92,7 @@ contract RewardRouter is Initializable, OwnableUpgradeable, AccessControlUpgrade
                 revert(0, returndatasize())
             }
         }
+
+        emit Handled(moduleType, data);
     }
 }
