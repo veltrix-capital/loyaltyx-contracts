@@ -12,6 +12,7 @@ describe("BusinessFactory", () => {
   let deployer: any;
   let businessOwner: any;
   let user: any;
+  let user2: any;
   let registry: BusinessRegistry;
   let factory: BusinessFactory;
   let tokenImpl: any;
@@ -20,7 +21,7 @@ describe("BusinessFactory", () => {
   const REGISTRAR_ROLE = ethers.id("REGISTRAR_ROLE"); // keccak256
 
   beforeEach(async () => {
-    [deployer, businessOwner, user] = await ethers.getSigners();
+    [deployer, businessOwner, user, user2] = await ethers.getSigners();
 
     // Deploy registry
     const RegistryFactory = await ethers.getContractFactory("BusinessRegistry");
@@ -94,7 +95,7 @@ describe("BusinessFactory", () => {
     // Check token ownership
     const Token = await ethers.getContractFactory("BaseToken");
     const token = Token.attach(tokenAddr);
-    expect(await token.owner()).to.equal(rewardRouterAddr);
+    expect(await token.owner()).to.equal(businessOwner.address);
 
     // Check routers initialized
     const Router = await ethers.getContractFactory("RewardRouter");
@@ -136,8 +137,12 @@ describe("BusinessFactory", () => {
       ["address", "address", "uint256"],
       [await token.getAddress(), user.address, 100]
     );
-
-    await rewardRouter.connect(businessOwner).handle("token", rewardData);
+    
+    // get random account to set as handler
+    await rewardRouter.connect(businessOwner).setHandler(user2.address, true);
+    // check if handler is set
+    expect(await rewardRouter.hasRole(await rewardRouter.HANDLER_ROLE(), user2.address)).to.be.true;
+    await rewardRouter.connect(user2).handle("token", rewardData);
 
     expect(await token.balanceOf(user.address)).to.equal(100);
 
@@ -150,7 +155,8 @@ describe("BusinessFactory", () => {
 
     await token.connect(user).approve(redeemRouterAddr, 100);
     
-    await redeemRouter.connect(businessOwner).handle("token", redeemData);
+    await redeemRouter.connect(businessOwner).setHandler(user2.address, true);
+    await redeemRouter.connect(user2).handle("token", redeemData);
 
     const finalBalance = await token.balanceOf(user.address);
     expect(finalBalance).to.equal(0);

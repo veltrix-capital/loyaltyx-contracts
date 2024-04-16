@@ -32,12 +32,31 @@ describe("BaseToken", () => {
     expect(await token.balanceOf(user)).to.equal(1000);
   });
 
+  it("set minter role correctly", async () => {
+    const minterRole = await token.MINTER_ROLE();
+    expect(await token.hasRole(minterRole, owner)).to.be.true;
+  });
+
+  it("grant minter role to another account", async () => {
+    const [_, newMinter] = await ethers.getSigners();
+    await token.setMinter(newMinter.address, true);
+    expect(await token.hasRole(await token.MINTER_ROLE(), newMinter.address)).to.be.true;
+
+    await token.connect(newMinter).mint(user, 500);
+    expect(await token.balanceOf(user)).to.equal(500);
+  });
+
   it("prevents non-owner from minting", async () => {
     const [_, nonOwner] = await ethers.getSigners();
     await expect(token.connect(nonOwner).mint(user, 1000))
-			.to.be.revertedWithCustomError(token, "OwnableUnauthorizedAccount")
-			.withArgs(nonOwner.address);
+			.to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+  });
 
+  it("allow transfer for escrow when transferable is false", async () => {    
+    await token.mint(owner, 1000);
+    await token.setEscrow(user, true);
+    await token.transfer(user, 100);
+    expect(await token.balanceOf(user)).to.equal(100);
   });
 
   it("allows transfer only if transferable is true", async () => {

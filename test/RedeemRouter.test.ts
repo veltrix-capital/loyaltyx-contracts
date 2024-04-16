@@ -7,6 +7,7 @@ import {
 } from "../typechain-types";
 
 describe("RedeemRouter", () => {
+  let deployer: any;
   let owner: any;
   let user: any;
 
@@ -15,7 +16,7 @@ describe("RedeemRouter", () => {
   let module: TokenRedeemModule;
 
   beforeEach(async () => {
-    [owner, user] = await ethers.getSigners();
+    [deployer, owner, user] = await ethers.getSigners();
 
     // Deploy base token
     const TokenFactory = await ethers.getContractFactory("BaseToken");
@@ -23,8 +24,8 @@ describe("RedeemRouter", () => {
       initializer: "initialize",
     });
 
-    // Mint to user and approve router
-    await token.mint(user.address, 1000);
+    // Mint to user
+    await token.connect(owner).mint(user.address, 1000);
 
     // Deploy router
     const RouterFactory = await ethers.getContractFactory("RedeemRouter");
@@ -36,15 +37,12 @@ describe("RedeemRouter", () => {
     const ModuleFactory = await ethers.getContractFactory("TokenRedeemModule");
     module = await ModuleFactory.deploy();
     await module.waitForDeployment();
-
     // Register module
     await router.connect(owner).setModule("token", await module.getAddress());
-
     // User approves router to burn tokens
     await token.connect(user).approve(await router.getAddress(), 500);
-
     // Transfer token ownership to router so it can check permissions (if needed)
-    await token.transferOwnership(await router.getAddress());
+    await token.connect(owner).setMinter(await router.getAddress(), true);
   });
 
   it("should delegatecall to TokenRedeemModule and burn tokens", async () => {
@@ -53,7 +51,7 @@ describe("RedeemRouter", () => {
       [await token.getAddress(), user.address, 500]
     );
 
-    await router.connect(user).handle("token", data);
+    await router.connect(owner).handle("token", data);
 
     expect(await token.balanceOf(user.address)).to.equal(500);
   });
@@ -65,8 +63,8 @@ describe("RedeemRouter", () => {
     );
 
     await expect(
-      router.connect(user).handle("unknown", data)
-    ).to.be.revertedWith("Invalid module");
+      router.connect(owner).handle("unknown", data)
+    ).to.be.revertedWithCustomError(router, "ModuleNotFound").withArgs("unknown");
   });
 
   it("should revert if not enough allowance", async () => {
@@ -76,7 +74,7 @@ describe("RedeemRouter", () => {
     );
 
     await expect(
-      router.connect(user).handle("token", data)
+      router.connect(owner).handle("token", data)
     ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
   });
 });

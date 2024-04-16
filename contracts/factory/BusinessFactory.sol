@@ -1,11 +1,10 @@
-// contracts/BusinessFactory.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./BaseToken.sol";
-import "./RewardRouter.sol";
-import "./RedeemRouter.sol";
-import "./registry/BusinessRegistry.sol";
+import "../modules/Token/BaseToken.sol";
+import "../RewardRouter.sol";
+import "../RedeemRouter.sol";
+import "../registry/BusinessRegistry.sol";
 import "@openzeppelin/contracts/proxy/Clones.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -61,7 +60,9 @@ contract BusinessFactory is Initializable, OwnableUpgradeable {
         RewardRouter(rewardRouter).initialize(address(this));
         RewardRouter(rewardRouter).setModule("token", tokenRewardModule);
         RewardRouter(rewardRouter).transferOwnership(businessOwner);
-        BaseToken(token).transferOwnership(rewardRouter);
+        BaseToken(token).setMinter(rewardRouter, true);
+        BaseToken(token).transferOwnership(businessOwner);
+        
 
         // Clone and initialize RedeemRouter
         redeemRouter = redeemRouterImpl.clone();

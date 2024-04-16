@@ -4,18 +4,18 @@ import { BusinessRegistry } from "../../typechain-types";
 
 describe("BusinessRegistry", () => {
   let registry: BusinessRegistry;
-  let veltrix: any;
+  let superDeployer: any;
   let businessOwner: any;
   let dummyToken: string;
   let dummyRewardRouter: string;
   let dummyRedeemRouter: string;
 
   beforeEach(async () => {
-    [veltrix, businessOwner] = await ethers.getSigners();
+    [superDeployer, businessOwner] = await ethers.getSigners();
 
     const RegistryFactory = await ethers.getContractFactory("BusinessRegistry");
     registry = await RegistryFactory.deploy();
-    await registry.initialize(veltrix.address);
+    await registry.initialize(superDeployer.address);
 
     // Dummy addresses for test purposes
     dummyToken = ethers.Wallet.createRandom().address;
@@ -54,7 +54,7 @@ describe("BusinessRegistry", () => {
         dummyRewardRouter,
         dummyRedeemRouter
       )
-    ).to.be.revertedWithCustomError(registry, "OwnableUnauthorizedAccount");
+    ).to.be.revertedWithCustomError(registry, "AccessControlUnauthorizedAccount");
   });
 
   it("should reject duplicate business registration", async () => {
@@ -78,6 +78,6 @@ describe("BusinessRegistry", () => {
         dummyRewardRouter,
         dummyRedeemRouter
       )
-    ).to.be.revertedWith("Already registered");
+    ).to.be.revertedWithCustomError(registry, "BusinessAlreadyRegistered").withArgs(business);
   });
 });

@@ -1,9 +1,9 @@
-# Veltrix LoyaltyX: Protocol Design Manifesto
+# LoyaltyX: Protocol Design Manifesto
 
-**Date:** 2025-07-05
+**Date:** 2024-07-05
 
 ## 🎯 Vision
-Veltrix LoyaltyX is a modular, token-based loyalty and royalty platform designed for scalable integration across retail, hospitality, and service industries. Our smart contract system is built for **mass adoption**, **plug-and-play modularity**, and **secure protocol-level governance**.
+LoyaltyX is a modular, token-based loyalty and royalty platform designed for scalable integration across retail, hospitality, and service industries. Our smart contract system is built for **mass adoption**, **plug-and-play modularity**, and **secure protocol-level governance**.
 
 ---
 
@@ -24,11 +24,11 @@ Veltrix LoyaltyX is a modular, token-based loyalty and royalty platform designed
 ### 3. 🛠 Stability
 - Upgradeable contracts via OpenZeppelin 5.3 proxy patterns
 - Per-business encapsulation (isolated state)
-- Centralized governance and assignment by Veltrix
+- Centralized governance and assignment by Blocmerce
 - Minimal cross-contract dependencies
 
 ### 4. 🔐 Security
-- Role-restricted functions (Veltrix-only, business-only)
+- Role-restricted functions (Blocmerce-only, business-only)
 - Ownership models via `OwnableUpgradeable`
 - Upgrade-safe contract patterns
 - Ready for external audits
@@ -49,6 +49,6 @@ Veltrix LoyaltyX is a modular, token-based loyalty and royalty platform designed
 
 ---
 
-**Veltrix Capital**
+**Blocmerce**
 Licensed for commercial use, MIT SPDX
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "../interfaces/IBusinessRegistry.sol";
+import "../shared/interfaces/IBusinessRegistry.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -21,6 +21,17 @@ contract BusinessRegistry is Initializable, OwnableUpgradeable, AccessControlUpg
 
     mapping(address => BusinessInfo) private businesses;
 
+    event BusinessRegistered(
+        address indexed business,
+        string name,
+        address owner,
+        address token,
+        address rewardRouter,
+        address redeemRouter
+    );
+
+    error BusinessAlreadyRegistered(address business);
+
     function initialize(address veltrixOwner) external initializer {
         __Ownable_init(veltrixOwner);
         __AccessControl_init();
@@ -36,7 +47,7 @@ contract BusinessRegistry is Initializable, OwnableUpgradeable, AccessControlUpg
         address rewardRouter,
         address redeemRouter
     ) external onlyRole(REGISTRAR_ROLE) {
-        require(!businesses[business].registered, "Already registered");
+        require(!businesses[business].registered, BusinessAlreadyRegistered(business));
         businesses[business] = BusinessInfo({
             name: name,
             owner: owner,
@@ -45,6 +56,8 @@ contract BusinessRegistry is Initializable, OwnableUpgradeable, AccessControlUpg
             redeemRouter: redeemRouter,
             registered: true
         });
+
+        emit BusinessRegistered(business, name, owner, token, rewardRouter, redeemRouter);
     }
 
     function isBusiness(address addr) external view override returns (bool) {
