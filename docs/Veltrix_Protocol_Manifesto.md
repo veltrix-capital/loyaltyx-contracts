@@ -45,7 +45,7 @@ Veltrix LoyaltyX is a modular, token-based loyalty and royalty platform designed
 
 ## 🧠 Guiding Philosophy
 
-> Design every feature to serve **100,000+ small businesses** with minimal gas cost, minimal friction, and maximum upgrade potential. Stability for today, flexibility for tomorrow.
+> Design every feature to serve **10,000+ businesses**, from small coffee shops to global enterprise brands with minimal gas cost, minimal friction, and maximum upgrade potential. Stability for today, flexibility for tomorrow.
 
 ---
 
