@@ -20,11 +20,11 @@ contract RedeemRouter is Initializable, OwnableUpgradeable {
         emit ModuleSet(redeemType, module);
     }
 
-    function redeem(bytes32 redeemType, address user, uint256 value, bytes calldata data) external onlyOwner {
+    function handle(bytes32 redeemType, address user, uint256 value, bytes calldata data) external onlyOwner {
         address module = modules[redeemType];
         require(module != address(0), "No module registered");
 
-        IRedeemModule(module).redeem(user, value, data);
+        IRedeemModule(module).handle(user, value, data);
         emit Redeemed(redeemType, user, value);
     }
 }

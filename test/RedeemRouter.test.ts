@@ -54,7 +54,7 @@ describe("RedeemRouter", function () {
     await token.connect(user).approve(await module.getAddress(), redeemAmount);
 
     await expect(
-      router.redeem(REDEEM_TYPE, user.address, redeemAmount, encodedData)
+      router.handle(REDEEM_TYPE, user.address, redeemAmount, encodedData)
     )
       .to.emit(module, "TokenRedeemed")
       .withArgs(user.address, redeemAmount, rewardType);
@@ -65,13 +65,13 @@ describe("RedeemRouter", function () {
   it("should revert if redeem type is not registered", async () => {
     const fakeType = ethers.encodeBytes32String("coupon");
     await expect(
-      router.redeem(fakeType, user.address, 100, "0x")
+      router.handle(fakeType, user.address, 100, "0x")
     ).to.be.revertedWith("No module registered");
   });
 
   it("should only allow owner to call redeem()", async () => {
     await expect(
-      router.connect(user).redeem(REDEEM_TYPE, user.address, 100, "0x")
+      router.connect(user).handle(REDEEM_TYPE, user.address, 100, "0x")
     ).to.be.revertedWithCustomError(router, "OwnableUnauthorizedAccount");
   });
 

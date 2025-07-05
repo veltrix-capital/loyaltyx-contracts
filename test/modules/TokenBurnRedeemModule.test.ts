@@ -45,7 +45,7 @@ describe("TokenBurnRedeemModule", function () {
     expect(await token.allowance(user.address, await module.getAddress())).to.equal(redeemAmount);
 
     // Call redeem (as module owner)
-    await expect(module.redeem(user.address, redeemAmount, encodedData))
+    await expect(module.handle(user.address, redeemAmount, encodedData))
       .to.emit(module, "TokenRedeemed")
       .withArgs(user.address, redeemAmount, rewardType);
 
@@ -56,20 +56,20 @@ describe("TokenBurnRedeemModule", function () {
 
   it("should revert if not enough allowance", async () => {
     await expect(
-      module.redeem(user.address, 100, ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["fail"]))
+      module.handle(user.address, 100, ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["fail"]))
     ).to.be.revertedWithCustomError(token, "ERC20InsufficientAllowance");
   });
 
   it("should revert if redeem value is zero", async () => {
     await expect(
-      module.redeem(user.address, 0, ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["fail"]))
+      module.handle(user.address, 0, ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["fail"]))
     ).to.be.revertedWith("Zero amount");
   });
 
   it("should revert if called by non-owner", async () => {
     await token.connect(user).approve(await module.getAddress(), 100);
     await expect(
-      module.connect(user).redeem(user.address, 100, ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["bad"]))
+      module.connect(user).handle(user.address, 100, ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["bad"]))
     ).to.be.revertedWithCustomError(module, "OwnableUnauthorizedAccount");
   });
 });

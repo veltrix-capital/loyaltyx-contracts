@@ -17,7 +17,7 @@ contract TokenBurnRedeemModule is Initializable, OwnableUpgradeable, IRedeemModu
         token = ERC20BurnableUpgradeable(_token);
     }
 
-    function redeem(address user, uint256 value, bytes calldata data) external override onlyOwner {
+    function handle(address user, uint256 value, bytes calldata data) external override onlyOwner {
         require(value > 0, "Zero amount");
         token.burnFrom(user, value);
 
