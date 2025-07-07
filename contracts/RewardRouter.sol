@@ -3,32 +3,35 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-
 import "./interfaces/IRewardModule.sol";
 
 contract RewardRouter is Initializable, OwnableUpgradeable {
-    /// @notice Maps behavior keys to reward module addresses
     mapping(bytes32 => address) public modules;
 
-    /// @notice Initializes the router and sets owner
-    function initialize(address owner_) public initializer {
-        __Ownable_init(owner_);
+    event ModuleSet(bytes32 indexed rewardType, address module);
+
+    function initialize(address _owner) public initializer {
+        __Ownable_init(_owner);
     }
 
-    /// @notice Sets or replaces a reward module for a given behavior key
-    function setModule(bytes32 behavior, address module) external onlyOwner {
-        modules[behavior] = module;
+    function setModule(bytes32 rewardType, address module) external onlyOwner {
+        require(module != address(0), "Invalid module");
+        modules[rewardType] = module;
+        emit ModuleSet(rewardType, module);
     }
 
-    /// @notice Handles a user behavior by forwarding to the assigned module
-    /// @param behavior key like "purchase" or "visit"
-    /// @param user the customer wallet
-    /// @param value optional numeric input (e.g. purchase amount)
-    /// @param data arbitrary extra input (e.g. coupon ID, JSON)
-    function handle(bytes32 behavior, address user, uint256 value, bytes calldata data) external onlyOwner {
-        address module = modules[behavior];
-        require(module != address(0), "No module registered");
+    function getModule(bytes32 key) external view returns (address) {
+        return modules[key];
+    }
 
+    function handle(
+        bytes32 rewardType,
+        address user,
+        uint256 value,
+        bytes calldata data
+    ) external {
+        address module = modules[rewardType];
+        require(module != address(0), "Reward module not set");
         IRewardModule(module).handle(user, value, data);
     }
 }
