@@ -16,8 +16,13 @@ contract RedeemRouter is Initializable, OwnableUpgradeable {
     }
 
     function setModule(bytes32 redeemType, address module) external onlyOwner {
+        require(module != address(0), "Invalid module");
         modules[redeemType] = module;
         emit ModuleSet(redeemType, module);
+    }
+
+    function getModule(bytes32 key) external view returns (address) {
+        return modules[key];
     }
 
     function handle(bytes32 redeemType, address user, uint256 value, bytes calldata data) external onlyOwner {
