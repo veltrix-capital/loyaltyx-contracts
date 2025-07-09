@@ -1,40 +1,36 @@
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
-import { Signer } from "ethers";
 import {
-  BusinessRegistry,
   BusinessFactory,
+  BusinessRegistry,
   BaseToken,
   RewardRouter,
   RedeemRouter,
-  TokenRewardModule,
-  TokenRedeemModule
 } from "../typechain-types";
 
-describe("BusinessFactory", function () {
-  let factory: BusinessFactory;
+describe("BusinessFactory", () => {
+  let deployer: any;
+  let businessOwner: any;
+  let user: any;
   let registry: BusinessRegistry;
-  let tokenImpl: BaseToken;
-  let rewardRouterImpl: RewardRouter;
-  let redeemRouterImpl: RedeemRouter;
-  let tokenRewardModuleImpl: TokenRewardModule;
-  let tokenRedeemModuleImpl: TokenRedeemModule;
-  let owner: Signer;
-  let nonOwner: Signer;
-  let businessOwner: Signer;
+  let factory: BusinessFactory;
+  let tokenImpl: any;
+  let rewardRouterImpl: any;
+  let redeemRouterImpl: any;
+  const REGISTRAR_ROLE = ethers.id("REGISTRAR_ROLE"); // keccak256
 
   beforeEach(async () => {
-    [owner, nonOwner, businessOwner] = await ethers.getSigners();
+    [deployer, businessOwner, user] = await ethers.getSigners();
 
-    const BusinessRegistryFactory = await ethers.getContractFactory("BusinessRegistry");
-    registry = await BusinessRegistryFactory.deploy() as BusinessRegistry;
-    await registry.waitForDeployment();
-    await registry.initialize(await owner.getAddress());
+    // Deploy registry
+    const RegistryFactory = await ethers.getContractFactory("BusinessRegistry");
+    registry = await RegistryFactory.deploy();
+    await registry.initialize(deployer.address);
 
-    const BaseTokenFactory = await ethers.getContractFactory("BaseToken");
-    tokenImpl = await BaseTokenFactory.deploy();
+    // Deploy implementations
+    const TokenFactory = await ethers.getContractFactory("BaseToken");
+    tokenImpl = await TokenFactory.deploy();
     await tokenImpl.waitForDeployment();
-
 
     const RewardRouterFactory = await ethers.getContractFactory("RewardRouter");
     rewardRouterImpl = await RewardRouterFactory.deploy();
@@ -45,188 +41,119 @@ describe("BusinessFactory", function () {
     await redeemRouterImpl.waitForDeployment();
 
     const TokenRewardModuleFactory = await ethers.getContractFactory("TokenRewardModule");
-    tokenRewardModuleImpl = await TokenRewardModuleFactory.deploy();
-    await tokenRewardModuleImpl.waitForDeployment();
+    const rewardModule = await TokenRewardModuleFactory.deploy();
+    await rewardModule.waitForDeployment();
 
     const TokenRedeemModuleFactory = await ethers.getContractFactory("TokenRedeemModule");
-    tokenRedeemModuleImpl = await TokenRedeemModuleFactory.deploy();
-    await tokenRedeemModuleImpl.waitForDeployment();
+    const redeemModule = await TokenRedeemModuleFactory.deploy();
+    await redeemModule.waitForDeployment();
 
-    const BusinessFactoryFactory = await ethers.getContractFactory("BusinessFactory");
-    factory = await upgrades.deployProxy(
-      BusinessFactoryFactory,
-      [
-        await tokenImpl.getAddress(),
-        await rewardRouterImpl.getAddress(),
-        await redeemRouterImpl.getAddress(),
-        await tokenRewardModuleImpl.getAddress(),
-        await tokenRedeemModuleImpl.getAddress(),
-        await registry.getAddress(),
-        await owner.getAddress()
-      ],
-      { kind: "uups" }
-    ) as BusinessFactory;
+    // Deploy factory
+    const FactoryFactory = await ethers.getContractFactory("BusinessFactory");
+    factory = await FactoryFactory.deploy();
+    await factory.waitForDeployment();
 
-    await registry.connect(owner).transferOwnership(await factory.getAddress());
-    await factory.connect(owner).acceptRegistryOwnership();
+    await factory.initialize(
+      await tokenImpl.getAddress(),
+      await rewardRouterImpl.getAddress(),
+      await redeemRouterImpl.getAddress(),
+      await rewardModule.getAddress(),
+      await redeemModule.getAddress(),
+      await registry.getAddress(),
+      deployer.address
+    );
+
+    await registry.grantRole(REGISTRAR_ROLE, await factory.getAddress());
   });
 
-  it("should allow only owner to create a business", async () => {
+  it("should create a new business with routers and token", async () => {
+    const tx = await factory.connect(deployer).createBusiness(
+      "Pizza Palace",
+      businessOwner.address,
+      "Pizza Palace token",
+      "PPT" 
+    );
+    const receipt = await tx.wait();
+    const event = receipt?.logs?.find(
+      (log: any) => log.eventName === "BusinessCreated"
+    );
+
+    const businessAddress = event?.args?.business;
+    const rewardRouterAddr = event?.args?.rewardRouter;
+    const redeemRouterAddr = event?.args?.redeemRouter;
+    const tokenAddr = event?.args?.token;
+
+    // Check registry
+    expect(businessAddress).to.equal(redeemRouterAddr);
+    expect(await registry.getBusinessOwner(businessAddress)).to.equal(businessOwner.address);
+    expect(await registry.getBusinessName(businessAddress)).to.equal("Pizza Palace");
+    expect(await registry.getBusinessToken(businessAddress)).to.equal(tokenAddr);
+    expect(await registry.getRewardRouter(businessAddress)).to.equal(rewardRouterAddr);
+    expect(await registry.getRedeemRouter(businessAddress)).to.equal(redeemRouterAddr);
+
+    // Check token ownership
+    const Token = await ethers.getContractFactory("BaseToken");
+    const token = Token.attach(tokenAddr);
+    expect(await token.owner()).to.equal(rewardRouterAddr);
+
+    // Check routers initialized
+    const Router = await ethers.getContractFactory("RewardRouter");
+    const rewardRouter = Router.attach(rewardRouterAddr);
+    expect(await rewardRouter.owner()).to.equal(businessOwner.address);
+  });
+
+  it("should prevent non-deployer from creating business", async () => {
     await expect(
-      factory.connect(nonOwner).createBusiness(
-        "Test Business",
-        "Moonrise Token",
-        "MOON",
-        "https://logo.uri",
-        await businessOwner.getAddress()
-      )
+      factory.connect(businessOwner).createBusiness("Fake Store", businessOwner.address, "Fake Token", "FT")
     ).to.be.revertedWithCustomError(factory, "OwnableUnauthorizedAccount");
-
-    await expect(
-      factory.connect(owner).createBusiness(
-        "Test Business",
-        "Moonrise Token",
-        "MOON",
-        "https://logo.uri",
-        await businessOwner.getAddress()
-      )
-    ).to.emit(factory, "BusinessCreated");
-
   });
 
-  it("should create business and register it in registry", async () => {
-    const tx = await factory.connect(owner).createBusiness(
-      "Test Business",
-      "Moonrise Token",
-      "MOON",
-      "https://logo.uri",
-      await businessOwner.getAddress()
-    );
-    const receipt = await tx.wait();
-
-    const event = receipt.logs.find((e: any) => e.fragment?.name === "BusinessCreated");
-    expect(event).to.exist;
-
-    const businessId = event.args.businessId;
-    const [name, metadataURI, ownerAddr, token, rewardRouter, redeemRouter] = await registry.getBusinessInfo(businessId);
-
-    expect(name).to.equal("Test Business");
-    expect(metadataURI).to.equal("https://logo.uri");
-    expect(ownerAddr).to.equal(await businessOwner.getAddress());
-    expect(token).to.properAddress;
-    expect(rewardRouter).to.properAddress;
-    expect(redeemRouter).to.properAddress;
-  });
-
-  it("should deploy minimal proxies and transfer ownership", async () => {
-    const tx = await factory.connect(owner).createBusiness(
-      "Test Business",
-      "Moonrise Token",
-      "MOON",
-      "https://logo.uri",
-      await businessOwner.getAddress()
+  // simulate reward / redeem flow
+  it("should reward tokens to user and then redeem them", async () => {
+    const tx = await factory.connect(deployer).createBusiness(
+      "Burger House",
+      businessOwner.address,
+      "BurgerToken",
+      "BTK"
     );
 
     const receipt = await tx.wait();
-    const event = receipt.logs.find((e: any) => e.fragment?.name === "BusinessCreated");
-    expect(event).to.exist;
-
-    // Get deployed addresses from event
-    const { token, rewardRouter, redeemRouter } = event.args;
-
-    // Get module addresses via router getters
-    const rewardRouterContract = await ethers.getContractAt("RewardRouter", rewardRouter);
-    const redeemRouterContract = await ethers.getContractAt("RedeemRouter", redeemRouter);
-
-    const rewardModuleAddr = await rewardRouterContract.getModule(
-      ethers.keccak256(ethers.toUtf8Bytes("purchase"))
-    );
-    const redeemModuleAddr = await redeemRouterContract.getModule(
-      ethers.keccak256(ethers.toUtf8Bytes("redeem"))
+    const event = receipt?.logs?.find(
+      (log: any) => log.eventName === "BusinessCreated"
     );
 
-    // Connect to all component contracts
-    const tokenContract = await ethers.getContractAt("BaseToken", token);
-    const rewardModule = await ethers.getContractAt("TokenRewardModule", rewardModuleAddr);
-    const redeemModule = await ethers.getContractAt("TokenRedeemModule", redeemModuleAddr);
+    const tokenAddr = event.args?.token;
+    const rewardRouterAddr = event.args?.rewardRouter;
+    const redeemRouterAddr = event.args?.redeemRouter;
 
-    // Assertions
-    const businessAddr = await businessOwner.getAddress();
-    expect(await tokenContract.owner()).to.equal(businessAddr);
-    expect(await rewardRouterContract.owner()).to.equal(businessAddr);
-    expect(await redeemRouterContract.owner()).to.equal(businessAddr);
-    expect(await rewardModule.owner()).to.equal(businessAddr);
-    expect(await redeemModule.owner()).to.equal(businessAddr);
+    const token = await ethers.getContractAt("BaseToken", tokenAddr);
+    const rewardRouter = await ethers.getContractAt("RewardRouter", rewardRouterAddr);
+    const redeemRouter = await ethers.getContractAt("RedeemRouter", redeemRouterAddr);
+
+    // Step 2: Reward user (businessOwner triggers reward logic)
+
+    const rewardData = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "uint256"],
+      [await token.getAddress(), user.address, 100]
+    );
+
+    await rewardRouter.connect(businessOwner).handle("token", rewardData);
+
+    expect(await token.balanceOf(user.address)).to.equal(100);
+
+    // Step 3: Redeem tokens (user triggers redeem logic)
+
+    const redeemData = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["address", "address", "uint256"],
+      [await token.getAddress(), user.address, 100]
+    );
+
+    await token.connect(user).approve(redeemRouterAddr, 100);
+    
+    await redeemRouter.connect(businessOwner).handle("token", redeemData);
+
+    const finalBalance = await token.balanceOf(user.address);
+    expect(finalBalance).to.equal(0);
+
   });
-
-  it("should simulate reward and redeem flow", async () => {
-    // Step 1: Create business
-    const tx = await factory.connect(owner).createBusiness(
-      "Test Business",
-      "Moonrise Token",
-      "MOON",
-      "https://logo.uri",
-      await businessOwner.getAddress()
-    );
-    const receipt = await tx.wait();
-    const event = receipt.logs.find((e: any) => e.fragment?.name === "BusinessCreated");
-
-    const token = await ethers.getContractAt("BaseToken", event.args.token);
-    const rewardRouter = await ethers.getContractAt("RewardRouter", event.args.rewardRouter);
-    const redeemRouter = await ethers.getContractAt("RedeemRouter", event.args.redeemRouter);
-
-    const rewardModuleAddr = await rewardRouter.getModule(ethers.keccak256(ethers.toUtf8Bytes("purchase")));
-    const redeemModuleAddr = await redeemRouter.getModule(ethers.keccak256(ethers.toUtf8Bytes("redeem")));
-
-    const rewardModule = await ethers.getContractAt("TokenRewardModule", rewardModuleAddr);
-    const redeemModule = await ethers.getContractAt("TokenRedeemModule", redeemModuleAddr);
-
-    console.log('-------------- ownership ---------------------');
-    console.log('Veltrix: ', await owner.getAddress());
-    console.log('BusinessFactory address: ', await factory.getAddress());
-    console.log('BusinessFactory owner: ', await factory.owner());
-    console.log('registry address: ', await registry.getAddress());
-    console.log('registry owner: ', await registry.owner());
-
-    console.log('business Owner: ', await businessOwner.getAddress());
-    console.log('rewardRouter address: ', await rewardRouter.owner());
-    console.log('rewardRouter owner: ', await rewardRouter.owner());
-    console.log('redeemRouter owner: ', await redeemRouter.owner());
-    console.log('rewardModule owner: ', await rewardModule.owner());
-    let rewardModuleAddress = await rewardModule.getAddress();
-
-    console.log('token owner:', await token.owner());
-    console.log('token minters:', await token.minters(rewardModuleAddress));
-
-    // Step 2: Simulate reward
-    const userAddr = await nonOwner.getAddress();
-    console.log('recepient address: ', userAddr);
-    const rewardTypeData = ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["purchase"]);
-    await rewardRouter.connect(businessOwner).handle(
-      ethers.keccak256(ethers.toUtf8Bytes("purchase")),
-      userAddr,
-      100,
-      rewardTypeData
-    );
-
-    expect(await token.balanceOf(userAddr)).to.equal(100);
-
-    // Step 3: Simulate redeem
-    const redeemTypeData = ethers.AbiCoder.defaultAbiCoder().encode(["string"], ["redeem"]);
-
-    // approve business's redeemModule
-    await token.connect(nonOwner).approve(redeemModuleAddr, 100);
-
-    await redeemRouter.connect(businessOwner).handle(
-      ethers.keccak256(ethers.toUtf8Bytes("redeem")),
-      userAddr,
-      60,
-      redeemTypeData
-    );
-
-    expect(await token.balanceOf(userAddr)).to.equal(40);
-  });
-
-
-
 });

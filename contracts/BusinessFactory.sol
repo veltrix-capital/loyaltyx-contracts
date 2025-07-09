@@ -1,134 +1,80 @@
+// contracts/BusinessFactory.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/proxy/Clones.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "./BaseToken.sol";
 import "./RewardRouter.sol";
 import "./RedeemRouter.sol";
 import "./registry/BusinessRegistry.sol";
-import "./modules/reward/TokenRewardModule.sol";
-import "./modules/redeem/TokenRedeemModule.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import "./interfaces/IBusinessRegistry.sol";
+contract BusinessFactory is Initializable, OwnableUpgradeable {
+    using Clones for address;
 
-contract BusinessFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-    address public baseTokenImplementation;
-    address public rewardRouterImplementation;
-    address public redeemRouterImplementation;
-    address public tokenRewardModuleImplementation;
-    address public tokenRedeemModuleImplementation;
-
-    IBusinessRegistry public businessRegistry;
+    address public baseTokenImpl;
+    address public rewardRouterImpl;
+    address public redeemRouterImpl;
+    address public tokenRewardModule;
+    address public tokenRedeemModule;
+    BusinessRegistry public registry;
 
     event BusinessCreated(
-        uint256 indexed businessId,
-        address indexed owner,
+        address indexed business,
+        address owner,
         address token,
         address rewardRouter,
-        address redeemRouter,
-        address rewardModule,
-        address redeemModule
+        address redeemRouter
     );
 
     function initialize(
-        address _baseToken,
-        address _rewardRouter,
-        address _redeemRouter,
+        address _baseTokenImpl,
+        address _rewardRouterImpl,
+        address _redeemRouterImpl,
         address _tokenRewardModule,
         address _tokenRedeemModule,
-        address _businessRegistry,
-        address _owner
-    ) public initializer {
-        __Ownable_init(_owner);
-
-        require(_baseToken != address(0), "Invalid token impl");
-        require(_rewardRouter != address(0), "Invalid reward router");
-        require(_redeemRouter != address(0), "Invalid redeem router");
-        require(_tokenRewardModule != address(0), "Invalid reward module");
-        require(_tokenRedeemModule != address(0), "Invalid redeem module");
-        require(_businessRegistry != address(0), "Invalid business registry");
-
-        baseTokenImplementation = _baseToken;
-        rewardRouterImplementation = _rewardRouter;
-        redeemRouterImplementation = _redeemRouter;
-        tokenRewardModuleImplementation = _tokenRewardModule;
-        tokenRedeemModuleImplementation = _tokenRedeemModule;
-        businessRegistry = IBusinessRegistry(_businessRegistry);
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    function acceptRegistryOwnership() external onlyOwner {
-        businessRegistry.acceptOwnership();
+        address _registry,
+        address veltrixOwner
+    ) external initializer {
+        __Ownable_init(veltrixOwner);
+        baseTokenImpl = _baseTokenImpl;
+        rewardRouterImpl = _rewardRouterImpl;
+        redeemRouterImpl = _redeemRouterImpl;
+        tokenRewardModule = _tokenRewardModule;
+        tokenRedeemModule = _tokenRedeemModule;
+        registry = BusinessRegistry(_registry);
     }
 
     function createBusiness(
-        string calldata businessName,
+        string calldata name,
+        address businessOwner,
         string calldata tokenName,
-        string calldata tokenSymbol,
-        string calldata metadataURI,
-        address businessOwner
-    ) external onlyOwner returns (uint256) {
-        require(businessOwner != address(0), "Invalid owner");
-
-        uint256 businessId = businessRegistry.registerBusiness(businessName, metadataURI, businessOwner);
-
-        address token = Clones.clone(baseTokenImplementation);
+        string calldata tokenSymbol
+    ) external onlyOwner returns (address token, address rewardRouter, address redeemRouter) {
+        // Clone and initialize BaseToken
+        token = baseTokenImpl.clone();
         BaseToken(token).initialize(tokenName, tokenSymbol, address(this));
-        businessRegistry.setBusinessToken(businessId, token);
 
-        address rewardRouter = Clones.clone(rewardRouterImplementation);
+        // Clone and initialize RewardRouter
+        rewardRouter = rewardRouterImpl.clone();
         RewardRouter(rewardRouter).initialize(address(this));
-
-        address redeemRouter = Clones.clone(redeemRouterImplementation);
-        RedeemRouter(redeemRouter).initialize(address(this));
-
-        businessRegistry.setBusinessRouters(businessId, rewardRouter, redeemRouter);
-
-        address rewardModule = Clones.clone(tokenRewardModuleImplementation);
-        TokenRewardModule(rewardModule).initialize(token, rewardRouter, address(this));
-
-        address redeemModule = Clones.clone(tokenRedeemModuleImplementation);
-        TokenRedeemModule(redeemModule).initialize(token, redeemRouter, address(this));
-
-        RewardRouter(rewardRouter).setModule(keccak256("purchase"), rewardModule);
-        RedeemRouter(redeemRouter).setModule(keccak256("redeem"), redeemModule);
-
-        BaseToken(token).setMinter(rewardModule, true);
-        
-        BaseToken(token).transferOwnership(businessOwner);
+        RewardRouter(rewardRouter).setModule("token", tokenRewardModule);
         RewardRouter(rewardRouter).transferOwnership(businessOwner);
+        BaseToken(token).transferOwnership(rewardRouter);
+
+        // Clone and initialize RedeemRouter
+        redeemRouter = redeemRouterImpl.clone();
+        RedeemRouter(redeemRouter).initialize(address(this));
+        RedeemRouter(redeemRouter).setModule("token", tokenRedeemModule);
         RedeemRouter(redeemRouter).transferOwnership(businessOwner);
-        TokenRewardModule(rewardModule).transferOwnership(businessOwner);
-        TokenRedeemModule(redeemModule).transferOwnership(businessOwner);
 
+        // Use redeem router address as business ID
+        address business = redeemRouter;
 
-        // 6. Register modules in BusinessRegistry
-        businessRegistry.addModuleToBusiness(
-            businessId,
-            uint256(IBusinessRegistry.ModuleType.REWARD),
-            rewardModule
-        );
+        // Register in central registry
+        registry.registerBusiness(business, name, businessOwner, token, rewardRouter, redeemRouter);
 
-        businessRegistry.addModuleToBusiness(
-            businessId,
-            uint256(IBusinessRegistry.ModuleType.REDEEM),
-            redeemModule
-        );
-
-        emit BusinessCreated(
-            businessId,
-            businessOwner,
-            token,
-            rewardRouter,
-            redeemRouter,
-            rewardModule,
-            redeemModule
-        );
-
-        return businessId;
+        emit BusinessCreated(business, businessOwner, token, rewardRouter, redeemRouter);
     }
 }

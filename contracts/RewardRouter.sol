@@ -1,37 +1,38 @@
+// contracts/RewardRouter.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "./interfaces/IRewardModule.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract RewardRouter is Initializable, OwnableUpgradeable {
-    mapping(bytes32 => address) public modules;
+    mapping(string => address) public modules;
 
-    event ModuleSet(bytes32 indexed rewardType, address module);
-
-    function initialize(address _owner) public initializer {
-        __Ownable_init(_owner);
+    function initialize(address businessOwner) external initializer {
+        __Ownable_init(businessOwner);
     }
 
-    function setModule(bytes32 rewardType, address module) external onlyOwner {
+    function setModule(string calldata moduleType, address module) external onlyOwner {
+        modules[moduleType] = module;
+    }
+
+    function getModule(string calldata moduleType) external view returns (address) {
+        return modules[moduleType];
+    }
+
+    function handle(string calldata moduleType, bytes calldata data) external {
+        address module = modules[moduleType];
         require(module != address(0), "Invalid module");
-        modules[rewardType] = module;
-        emit ModuleSet(rewardType, module);
-    }
 
-    function getModule(bytes32 key) external view returns (address) {
-        return modules[key];
-    }
+        (bool success, ) = module.delegatecall(
+            abi.encodeWithSignature("handle(bytes)", data)
+        );
 
-    function handle(
-        bytes32 rewardType,
-        address user,
-        uint256 value,
-        bytes calldata data
-    ) external {
-        address module = modules[rewardType];
-        require(module != address(0), "Reward module not set");
-        IRewardModule(module).handle(user, value, data);
+        if (!success) {
+            assembly {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
+        }
     }
 }

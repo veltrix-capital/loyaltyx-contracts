@@ -1,35 +1,33 @@
+// contracts/RedeemRouter.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "./interfaces/IRedeemModule.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract RedeemRouter is Initializable, OwnableUpgradeable {
-    mapping(bytes32 => address) public modules;
+    mapping(string => address) public modules;
 
-    event ModuleSet(bytes32 indexed redeemType, address module);
-    event Redeemed(bytes32 indexed redeemType, address indexed user, uint256 value);
-
-    function initialize(address _owner) public initializer {
-        __Ownable_init(_owner);
+    function initialize(address businessOwner) external initializer {
+        __Ownable_init(businessOwner);
     }
 
-    function setModule(bytes32 redeemType, address module) external onlyOwner {
+    function setModule(string calldata moduleType, address module) external onlyOwner {
+        modules[moduleType] = module;
+    }
+
+    function handle(string calldata moduleType, bytes calldata data) external {
+        address module = modules[moduleType];
         require(module != address(0), "Invalid module");
-        modules[redeemType] = module;
-        emit ModuleSet(redeemType, module);
-    }
 
-    function getModule(bytes32 key) external view returns (address) {
-        return modules[key];
-    }
-
-    function handle(bytes32 redeemType, address user, uint256 value, bytes calldata data) external onlyOwner {
-        address module = modules[redeemType];
-        require(module != address(0), "No module registered");
-
-        IRedeemModule(module).handle(user, value, data);
-        emit Redeemed(redeemType, user, value);
+        (bool success, ) = module.delegatecall(
+            abi.encodeWithSignature("handle(bytes)", data)
+        );
+        if (!success) {
+            assembly {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
+        }
     }
 }
